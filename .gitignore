@@ -1,0 +1,9 @@
+# Ignore HuBERT embeddings
+hindi_dataset/hubert_features/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# environment files
+.env
