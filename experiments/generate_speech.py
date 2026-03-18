@@ -23,7 +23,7 @@ OUTPUT_DIR      = os.path.join(ROOT, "outputs")
 
 SAMPLE_RATE = 22050
 N_MELS      = 80
-VOCAB_SIZE  = 200
+VOCAB_SIZE  = 32
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
