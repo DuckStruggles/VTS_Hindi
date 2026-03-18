@@ -1,38 +1,37 @@
-import os, sys
-import random
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # add this
+import os, sys, random
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import torch
 import numpy as np
+import cv2
+cv2.setNumThreads(0)
+
+torch.set_num_threads(os.cpu_count())
 
 from models.lip2speech_model import LipToSpeech, VOCAB_SIZE
 from utils.video_loader import load_video
 
-# ── config ────────────────────────────────────────────────────────────────────
-VIDEO_FOLDER  = "hindi_dataset/video"
-UNITS_FOLDER  = "hindi_dataset/units"
-MODEL_SAVE    = "models/lip_model.pth"
-EPOCHS        = 3
-LR            = 5e-5
-DEVICE        = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+VIDEO_FOLDER = "hindi_dataset/video"
+UNITS_FOLDER = "hindi_dataset/units"
+MODEL_SAVE   = "models/lip_model.pth"
+EPOCHS       = 60
+LR           = 1e-3
+DEVICE       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-print(f"Training on: {DEVICE}")
-print(f"Vocab size : {VOCAB_SIZE}")
+print(f"Training on : {DEVICE}")
+print(f"Vocab size  : {VOCAB_SIZE}")
 
-# ── model, optimiser, loss ────────────────────────────────────────────────────
 model     = LipToSpeech().to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-loss_fn   = torch.nn.CrossEntropyLoss()
+loss_fn   = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
 
 videos = [v for v in os.listdir(VIDEO_FOLDER) if v.endswith(".mp4")]
-
 print(f"Found {len(videos)} videos.")
 
-# ── training loop ─────────────────────────────────────────────────────────────
 for epoch in range(EPOCHS):
 
-    # FIX 1: everything below is now correctly indented inside the epoch loop
     random.shuffle(videos)
-    model.train()                          # FIX 4: sets BatchNorm to train mode
+    model.train()
 
     epoch_loss = 0.0
     trained    = 0
@@ -46,30 +45,29 @@ for epoch in range(EPOCHS):
         if not os.path.exists(units_path):
             continue
 
-        # load frames
+        # load frames -> (1, T, C, H, W)
         frames = load_video(video_path)
         frames = torch.tensor(frames).permute(0, 3, 1, 2).float()
-        frames = frames.unsqueeze(0).to(DEVICE)       # (1, T, C, H, W)
+        frames = frames.unsqueeze(0).to(DEVICE)
 
-        # load target units
+        # load target units -> (T,)
         units = np.array(open(units_path).read().split(), dtype=int)
-        units = torch.tensor(units).long().to(DEVICE) # (T,)
+        units = units[::2]  # downsample 50Hz → 25Hz to match video fps
+        units = torch.tensor(units).long().to(DEVICE)
 
-        # forward
+        # forward pass
         output = model(frames)                         # (1, T, VOCAB_SIZE)
 
-        # align lengths (video fps vs hubert frame rate may differ slightly)
+        # align lengths
         min_len = min(output.shape[1], units.shape[0])
         output  = output[:, :min_len, :]               # (1, min_len, VOCAB_SIZE)
         units   = units[:min_len]                      # (min_len,)
 
-        # FIX 3: use VOCAB_SIZE constant instead of hardcoded 100
         loss = loss_fn(
             output.reshape(-1, VOCAB_SIZE),
             units.reshape(-1)
         )
 
-        # FIX 2: zero_grad before backward
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -80,7 +78,17 @@ for epoch in range(EPOCHS):
     avg_loss = epoch_loss / max(trained, 1)
     print(f"Epoch {epoch+1}/{EPOCHS}  |  clips: {trained}  |  avg loss: {avg_loss:.4f}")
 
-# ── save ──────────────────────────────────────────────────────────────────────
+    # save checkpoint every 10 epochs
+    if (epoch + 1) % 10 == 0:
+        os.makedirs(os.path.dirname(MODEL_SAVE), exist_ok=True)
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': avg_loss,
+        }, MODEL_SAVE.replace('.pth', f'_epoch{epoch+1}.pth'))
+        print(f"  Checkpoint saved → epoch {epoch+1}")
+
 os.makedirs(os.path.dirname(MODEL_SAVE), exist_ok=True)
 torch.save(model.state_dict(), MODEL_SAVE)
-print(f"Model saved → {MODEL_SAVE}")
+print(f"Model saved -> {MODEL_SAVE}")

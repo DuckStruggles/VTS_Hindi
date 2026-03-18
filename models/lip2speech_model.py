@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-VOCAB_SIZE = 100   # matches kmeans_hindi_units.py n_clusters=100
+VOCAB_SIZE = 32   # matches kmeans_hindi_units.py n_clusters=100
 
 class LipToSpeech(nn.Module):
     def __init__(self, vocab_size: int = VOCAB_SIZE, hidden: int = 256):
@@ -27,14 +27,14 @@ class LipToSpeech(nn.Module):
         self.lstm = nn.LSTM(
             input_size=64 * 24 * 24,     # 36864
             hidden_size=hidden,
-            num_layers=2,                # added: extra depth helps Hindi
+            num_layers=1,                # added: extra depth helps Hindi
             batch_first=True,
-            dropout=0.2,
-            bidirectional=True           # added: sees future context too
+            dropout=0.0,
+            bidirectional=False           # added: sees future context too
         )
 
         # bidirectional doubles the output dimension
-        lstm_out_dim = hidden * 2
+        lstm_out_dim = hidden
 
         # --- unit classifier: outputs one logit per K-means cluster ---
         self.fc = nn.Linear(lstm_out_dim, vocab_size)
