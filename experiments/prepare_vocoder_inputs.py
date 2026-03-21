@@ -106,7 +106,8 @@ for fname in unit_files:
         continue
 
     unit_ids = np.array(list(map(int, content.split())), dtype=np.int64)
-
+    unit_ids = np.repeat(unit_ids, 2)
+    
     if os.path.exists(spk_path):
         spk_emb = np.load(spk_path).astype(np.float32).flatten()
     else:

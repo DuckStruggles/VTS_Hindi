@@ -9,3 +9,15 @@ __pycache__/
 .env
 
 models/lip_model.pth
+
+# models
+models/*.pth
+models/*.pkl
+
+# outputs
+outputs/
+pred_unit/
+pred_mel/
+
+# logs
+logs/

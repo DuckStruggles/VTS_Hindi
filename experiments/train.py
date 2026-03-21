@@ -1,4 +1,5 @@
-import os, sys, random
+import os, sys, random, csv
+from datetime import datetime
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import torch
@@ -14,19 +15,32 @@ from utils.video_loader import load_video
 VIDEO_FOLDER = "hindi_dataset/video"
 UNITS_FOLDER = "hindi_dataset/units"
 MODEL_SAVE   = "models/lip_model.pth"
-EPOCHS       = 60
-LR           = 1e-3
+LOG_FILE     = "logs/training_log.csv"
+EPOCHS       = 80
+LR           = 5e-4
 DEVICE       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print(f"Training on : {DEVICE}")
 print(f"Vocab size  : {VOCAB_SIZE}")
 
+# ── create logs folder ────────────────────────────────────────────────────────
+os.makedirs("logs", exist_ok=True)
+
+# ── open log file ─────────────────────────────────────────────────────────────
+log_f  = open(LOG_FILE, "w", newline="")
+writer = csv.writer(log_f)
+writer.writerow(["epoch", "avg_loss", "clips_trained", "timestamp"])
+print(f"Logging to  : {LOG_FILE}")
+
+# ── model setup ───────────────────────────────────────────────────────────────
 model     = LipToSpeech().to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 loss_fn   = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
 
 videos = [v for v in os.listdir(VIDEO_FOLDER) if v.endswith(".mp4")]
 print(f"Found {len(videos)} videos.")
+
+best_loss = float("inf")
 
 for epoch in range(EPOCHS):
 
@@ -52,7 +66,7 @@ for epoch in range(EPOCHS):
 
         # load target units -> (T,)
         units = np.array(open(units_path).read().split(), dtype=int)
-        units = units[::2]  # downsample 50Hz → 25Hz to match video fps
+        units = units[::2]   # downsample 50Hz → 25Hz to match video fps
         units = torch.tensor(units).long().to(DEVICE)
 
         # forward pass
@@ -64,9 +78,13 @@ for epoch in range(EPOCHS):
         units   = units[:min_len]                      # (min_len,)
 
         loss = loss_fn(
-            output.reshape(-1, VOCAB_SIZE),
-            units.reshape(-1)
+        output.reshape(-1, VOCAB_SIZE),
+        units.reshape(-1)
         )
+
+    # 🔥 diversity regularization
+        entropy = -torch.sum(torch.softmax(output, dim=-1) * torch.log_softmax(output, dim=-1))
+        loss = loss - 0.01 * entropy
 
         optimizer.zero_grad()
         loss.backward()
@@ -75,20 +93,37 @@ for epoch in range(EPOCHS):
         epoch_loss += loss.item()
         trained    += 1
 
-    avg_loss = epoch_loss / max(trained, 1)
+    avg_loss  = epoch_loss / max(trained, 1)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     print(f"Epoch {epoch+1}/{EPOCHS}  |  clips: {trained}  |  avg loss: {avg_loss:.4f}")
 
-    # save checkpoint every 10 epochs
+    # ── log to CSV ────────────────────────────────────────────────────────────
+    writer.writerow([epoch + 1, round(avg_loss, 6), trained, timestamp])
+    log_f.flush()
+
+    # ── checkpoint every 10 epochs ────────────────────────────────────────────
     if (epoch + 1) % 10 == 0:
         os.makedirs(os.path.dirname(MODEL_SAVE), exist_ok=True)
         torch.save({
-            'epoch': epoch + 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': avg_loss,
-        }, MODEL_SAVE.replace('.pth', f'_epoch{epoch+1}.pth'))
+            "epoch":                epoch + 1,
+            "model_state_dict":     model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss":                 avg_loss,
+        }, MODEL_SAVE.replace(".pth", f"_epoch{epoch+1}.pth"))
         print(f"  Checkpoint saved → epoch {epoch+1}")
 
+    # ── save best model ───────────────────────────────────────────────────────
+    if avg_loss < best_loss:
+        best_loss = avg_loss
+        os.makedirs(os.path.dirname(MODEL_SAVE), exist_ok=True)
+        torch.save(model.state_dict(), MODEL_SAVE.replace(".pth", "_best.pth"))
+
+log_f.close()
+
+# ── save final model ──────────────────────────────────────────────────────────
 os.makedirs(os.path.dirname(MODEL_SAVE), exist_ok=True)
 torch.save(model.state_dict(), MODEL_SAVE)
-print(f"Model saved -> {MODEL_SAVE}")
+print(f"Model saved      → {MODEL_SAVE}")
+print(f"Best model saved → {MODEL_SAVE.replace('.pth', '_best.pth')}")
+print(f"Training log     → {LOG_FILE}")

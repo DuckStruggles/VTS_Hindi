@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-VOCAB_SIZE = 32   # matches kmeans_hindi_units.py n_clusters=100
+VOCAB_SIZE = 100   # matches kmeans_hindi_units.py n_clusters=100
 
 class LipToSpeech(nn.Module):
     def __init__(self, vocab_size: int = VOCAB_SIZE, hidden: int = 256):
