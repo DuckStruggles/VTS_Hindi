@@ -81,7 +81,21 @@ def units_to_mel(unit_ids, spk_emb):
         emb_tensor = torch.tensor(embeddings).to(DEVICE)
         mel = projector(emb_tensor).cpu().numpy()       # (T, N_MELS)
 
-    return mel.T.astype(np.float32)                     # (N_MELS, T)
+    mel = mel.T
+
+     # upsample time axis by factor of ~3.43 (86Hz / 25Hz)
+    T_in  = mel.shape[1]
+    T_out = int(T_in * (22050 / 256) / 25)             # target length at 86Hz
+
+    mel_upsampled = np.zeros((N_MELS, T_out), dtype=np.float32)
+    for i in range(N_MELS):
+        mel_upsampled[i] = np.interp(
+            np.linspace(0, T_in - 1, T_out),
+            np.arange(T_in),
+            mel[i]
+        )
+
+    return mel_upsampled.astype(np.float32)                     # (N_MELS, T)
 
 # ── process all clips ─────────────────────────────────────────────────────────
 unit_files = sorted([f for f in os.listdir(PRED_UNIT_DIR) if f.endswith(".txt")])
@@ -106,8 +120,7 @@ for fname in unit_files:
         continue
 
     unit_ids = np.array(list(map(int, content.split())), dtype=np.int64)
-    unit_ids = np.repeat(unit_ids, 2)
-    
+
     if os.path.exists(spk_path):
         spk_emb = np.load(spk_path).astype(np.float32).flatten()
     else:

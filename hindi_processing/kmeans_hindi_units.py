@@ -1,17 +1,3 @@
-"""
-kmeans_hindi_units.py
-----------------------
-1. Loads all HuBERT features from hindi_dataset/hubert_features/
-2. Trains a KMeans model with 100 clusters
-3. Assigns unit IDs to every clip → saves to hindi_dataset/units/*.units
-4. Saves the KMeans model itself → models/kmeans_model.pkl
-5. Saves the cluster centroids as unit embeddings → models/unit_embeddings.pkl
-   (this is what prepare_vocoder_inputs.py uses to convert units → mel)
-
-FIX: the old script never saved the KMeans model or the centroids,
-so unit_embeddings.pkl was never created anywhere in the project.
-"""
-
 import os
 import pickle
 import numpy as np

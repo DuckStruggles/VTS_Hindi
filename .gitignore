@@ -7,8 +7,7 @@ __pycache__/
 
 # environment files
 .env
-
-models/lip_model.pth
+tts_env/
 
 # models
 models/*.pth
@@ -21,3 +20,7 @@ pred_mel/
 
 # logs
 logs/
+
+vocoder/hifigan_hi/best_model.pth
+
+0001-Ignore-model-weights-and-remove-tracked-checkpoint.patch
