@@ -1,22 +1,3 @@
-"""
-vocoder_infer_hi.py
---------------------
-Generates audio using the Indic-TTS Hindi HiFi-GAN vocoder.
-Uses the pretrained Hindi checkpoint from AI4Bharat/Indic-TTS.
-
-Requirements:
-    pip install TTS
-
-Folder structure expected:
-    vocoder/
-        hifigan_hi/
-            best_model.pth   ← from hi/hifigan/best_model.pth
-            config.json      ← from hi/hifigan/config.json
-
-Run AFTER prepare_vocoder_inputs.py.
-Outputs saved to outputs/ with _hi suffix for comparison.
-"""
-
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -25,7 +6,6 @@ import torch
 import numpy as np
 from scipy.io.wavfile import write
 
-# ── config ────────────────────────────────────────────────────────────────────
 MEL_FOLDER      = "pred_mel/sample"
 OUTPUT_FOLDER   = "outputs/hi"
 CHECKPOINT_PATH = "vocoder/hifigan_hi/best_model.pth"
@@ -34,7 +14,6 @@ DEVICE          = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# ── load Indic-TTS Hindi HiFi-GAN via Coqui TTS ──────────────────────────────
 print("Loading Hindi HiFi-GAN (Indic-TTS)...")
 
 try:
@@ -44,7 +23,6 @@ except ImportError:
         "Coqui TTS not installed. Run: pip install TTS"
     )
 
-# generator params — must match hi/hifigan/config.json
 generator = HifiganGenerator(
     in_channels            = 80,
     out_channels           = 1,
@@ -56,7 +34,6 @@ generator = HifiganGenerator(
     upsample_factors       = [8,8,2,2],
 ).to(DEVICE)
 
-# load checkpoint — Coqui format uses "model" key
 if not os.path.exists(CHECKPOINT_PATH):
     raise FileNotFoundError(
         f"Hindi HiFi-GAN checkpoint not found at {CHECKPOINT_PATH}\n"
@@ -66,7 +43,6 @@ if not os.path.exists(CHECKPOINT_PATH):
 ckpt      = torch.load(CHECKPOINT_PATH, map_location=DEVICE)
 state     = ckpt["model"]
 
-# Coqui wraps generator inside GAN — extract generator weights only
 gen_state = {
     k.replace("model_g.", ""): v
     for k, v in state.items()
@@ -81,7 +57,6 @@ if hasattr(generator, "remove_weight_norm"):
 
 print(f"  Hindi HiFi-GAN loaded from {CHECKPOINT_PATH}")
 
-# ── run inference ─────────────────────────────────────────────────────────────
 mel_files = sorted([f for f in os.listdir(MEL_FOLDER) if f.endswith(".npy")])
 
 if not mel_files:
@@ -97,14 +72,14 @@ for file in mel_files:
     mel_path = os.path.join(MEL_FOLDER, file)
     out_path = os.path.join(OUTPUT_FOLDER, f"{name}_hi.wav")
 
-    mel = np.load(mel_path)                                    # (80, T)
-    mel = torch.FloatTensor(mel).unsqueeze(0).to(DEVICE)       # (1, 80, T)
+    mel = np.load(mel_path)                              
+    mel = torch.FloatTensor(mel).unsqueeze(0).to(DEVICE)  
 
     with torch.no_grad():
-        audio = generator(mel)                                 # (1, 1, T_audio)
+        audio = generator(mel)                      
 
     audio = audio.squeeze().cpu().numpy()
-    audio = audio / (np.max(np.abs(audio)) + 1e-8)            # normalise
+    audio = audio / (np.max(np.abs(audio)) + 1e-8)   
 
     write(out_path, SAMPLE_RATE, (audio * 32767).astype(np.int16))
     print(f"  {name} → {out_path}")

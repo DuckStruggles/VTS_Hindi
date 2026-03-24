@@ -13,8 +13,6 @@ from vocoder.hifigan.models import Generator
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# paths
 mel_folder = "pred_mel/sample/"
 output_folder = "outputs"
 config_path = "vocoder/hifigan/config.json"
@@ -22,7 +20,6 @@ checkpoint_path = "vocoder/hifigan/generator_v1"
 
 os.makedirs(output_folder, exist_ok=True)
 
-# load config
 from types import SimpleNamespace
 
 with open(config_path) as f:

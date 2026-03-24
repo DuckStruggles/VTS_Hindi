@@ -23,16 +23,13 @@ DEVICE       = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Training on : {DEVICE}")
 print(f"Vocab size  : {VOCAB_SIZE}")
 
-# ── create logs folder ────────────────────────────────────────────────────────
 os.makedirs("logs", exist_ok=True)
 
-# ── open log file ─────────────────────────────────────────────────────────────
 log_f  = open(LOG_FILE, "w", newline="")
 writer = csv.writer(log_f)
 writer.writerow(["epoch", "avg_loss", "clips_trained", "timestamp"])
 print(f"Logging to  : {LOG_FILE}")
 
-# ── model setup ───────────────────────────────────────────────────────────────
 model     = LipToSpeech().to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 loss_fn   = torch.nn.CrossEntropyLoss(label_smoothing=0.1)
@@ -59,30 +56,25 @@ for epoch in range(EPOCHS):
         if not os.path.exists(units_path):
             continue
 
-        # load frames -> (1, T, C, H, W)
         frames = load_video(video_path)
         frames = torch.tensor(frames).permute(0, 3, 1, 2).float()
         frames = frames.unsqueeze(0).to(DEVICE)
 
-        # load target units -> (T,)
         units = np.array(open(units_path).read().split(), dtype=int)
-        units = units[::2]   # downsample 50Hz → 25Hz to match video fps
+        units = units[::2] 
         units = torch.tensor(units).long().to(DEVICE)
 
-        # forward pass
-        output = model(frames)                         # (1, T, VOCAB_SIZE)
+        output = model(frames)                        
 
-        # align lengths
         min_len = min(output.shape[1], units.shape[0])
-        output  = output[:, :min_len, :]               # (1, min_len, VOCAB_SIZE)
-        units   = units[:min_len]                      # (min_len,)
+        output  = output[:, :min_len, :]           
+        units   = units[:min_len]      
 
         loss = loss_fn(
         output.reshape(-1, VOCAB_SIZE),
         units.reshape(-1)
         )
 
-    # 🔥 diversity regularization
         entropy = -torch.sum(torch.softmax(output, dim=-1) * torch.log_softmax(output, dim=-1))
         loss = loss - 0.01 * entropy
 
@@ -98,11 +90,9 @@ for epoch in range(EPOCHS):
 
     print(f"Epoch {epoch+1}/{EPOCHS}  |  clips: {trained}  |  avg loss: {avg_loss:.4f}")
 
-    # ── log to CSV ────────────────────────────────────────────────────────────
     writer.writerow([epoch + 1, round(avg_loss, 6), trained, timestamp])
     log_f.flush()
 
-    # ── checkpoint every 10 epochs ────────────────────────────────────────────
     if (epoch + 1) % 10 == 0:
         os.makedirs(os.path.dirname(MODEL_SAVE), exist_ok=True)
         torch.save({
@@ -113,7 +103,6 @@ for epoch in range(EPOCHS):
         }, MODEL_SAVE.replace(".pth", f"_epoch{epoch+1}.pth"))
         print(f"  Checkpoint saved → epoch {epoch+1}")
 
-    # ── save best model ───────────────────────────────────────────────────────
     if avg_loss < best_loss:
         best_loss = avg_loss
         os.makedirs(os.path.dirname(MODEL_SAVE), exist_ok=True)
@@ -121,7 +110,6 @@ for epoch in range(EPOCHS):
 
 log_f.close()
 
-# ── save final model ──────────────────────────────────────────────────────────
 os.makedirs(os.path.dirname(MODEL_SAVE), exist_ok=True)
 torch.save(model.state_dict(), MODEL_SAVE)
 print(f"Model saved      → {MODEL_SAVE}")

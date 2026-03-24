@@ -5,11 +5,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-# ── resolve project root ──────────────────────────────────────────────────────
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 
-# ── config ────────────────────────────────────────────────────────────────────
 PRED_UNIT_DIR    = os.path.join(ROOT, "pred_unit",  "sample")
 SPK_EMB_DIR      = os.path.join(ROOT, "spk_emb",    "sample")
 PRED_MEL_DIR     = os.path.join(ROOT, "pred_mel",   "sample")
@@ -21,7 +19,6 @@ DEVICE  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 os.makedirs(PRED_MEL_DIR, exist_ok=True)
 
-# ── MelProjector (must match train_mel_projector.py) ─────────────────────────
 class MelProjector(nn.Module):
     def __init__(self, in_dim: int = 768, out_dim: int = 80):
         super().__init__()
@@ -37,7 +34,6 @@ class MelProjector(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-# ── load unit embedding table ─────────────────────────────────────────────────
 if not os.path.exists(EMBEDDINGS_PATH):
     raise FileNotFoundError(
         f"{EMBEDDINGS_PATH} not found.\n"
@@ -52,7 +48,6 @@ VOCAB_SIZE, EMBED_DIM = embedding_table.shape
 print(f"  Vocab size    : {VOCAB_SIZE}")
 print(f"  Embedding dim : {EMBED_DIM}")
 
-# ── load trained MelProjector ─────────────────────────────────────────────────
 if not os.path.exists(PROJECTOR_PATH):
     raise FileNotFoundError(
         f"{PROJECTOR_PATH} not found.\n"
@@ -65,27 +60,23 @@ projector.load_state_dict(torch.load(PROJECTOR_PATH, map_location=DEVICE))
 projector.eval()
 print("  MelProjector loaded.")
 
-# ── conversion function ───────────────────────────────────────────────────────
 def units_to_mel(unit_ids, spk_emb):
     unit_ids   = np.clip(unit_ids, 0, VOCAB_SIZE - 1)
-    embeddings = embedding_table[unit_ids]              # (T, EMBED_DIM)
+    embeddings = embedding_table[unit_ids]          
 
-    # add speaker embedding as global offset
     spk     = np.zeros(EMBED_DIM, dtype=np.float32)
     n       = min(len(spk_emb), EMBED_DIM)
     spk[:n] = spk_emb[:n]
-    embeddings = embeddings + spk[None, :]              # (T, EMBED_DIM)
+    embeddings = embeddings + spk[None, :]          
 
-    # use learned projection instead of random matrix
     with torch.no_grad():
         emb_tensor = torch.tensor(embeddings).to(DEVICE)
-        mel = projector(emb_tensor).cpu().numpy()       # (T, N_MELS)
+        mel = projector(emb_tensor).cpu().numpy()   
 
     mel = mel.T
 
-     # upsample time axis by factor of ~3.43 (86Hz / 25Hz)
     T_in  = mel.shape[1]
-    T_out = int(T_in * (22050 / 256) / 25)             # target length at 86Hz
+    T_out = int(T_in * (22050 / 256) / 25)    
 
     mel_upsampled = np.zeros((N_MELS, T_out), dtype=np.float32)
     for i in range(N_MELS):
@@ -95,9 +86,8 @@ def units_to_mel(unit_ids, spk_emb):
             mel[i]
         )
 
-    return mel_upsampled.astype(np.float32)                     # (N_MELS, T)
+    return mel_upsampled.astype(np.float32)          
 
-# ── process all clips ─────────────────────────────────────────────────────────
 unit_files = sorted([f for f in os.listdir(PRED_UNIT_DIR) if f.endswith(".txt")])
 
 if not unit_files:
